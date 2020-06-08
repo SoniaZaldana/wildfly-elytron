@@ -8,7 +8,6 @@ author: szaldana
 link:
 ---
 
-
 The *https://github.com/wildfly-security-incubator/elytron-examples[ejb-security]* quickstart demonstrates an advanced example on how to secure EJBs using a FileSystem realm with
 SCRAM-SHA-512 SASL authentication along with a client credential store. The focus is on the Elytron
 configuration, so if you wish to learn more about using Jakarta EE declarative security to control access to EJBs please
