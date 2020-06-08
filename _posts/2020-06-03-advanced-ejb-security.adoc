@@ -89,16 +89,15 @@ EJB subsystem as follows:
 
 == Enabling SCRAM-SHA-512
 
-Multiple authentication mechanisms can be used at the same time for different protocols. By default, the two
-core authentication mechanisms available are ``HTTP Server authentication`` and ``SASL Server authentication``.
-We want our SASL authentication factory to make use of the FileSystem security domain we configured. Therefore, we add
-said security domain as follows:
+Multiple authentication mechanisms can be configured for different protocols. Elytron provides support for two types of
+authentication: ``HTTP authentication`` and ``SASL  authentication``. We want our SASL authentication factory to make
+use of the FileSystem security domain we configured. Therefore, we add said security domain as follows:
 [source]
 ----
 /subsystem=elytron/sasl-authentication-factory=application-sasl-authentication:write-attribute(name=security-domain, value=fsSD)
 ----
 
-By default, our authentication factory has only enabled ``DIGEST-MD5`` as the sole authentication mechanism. Therefore, we enable ``SCRAM-SHA-512``
+By default, our authentication factory has enabled ``JBOSS-LOCAL-USER`` and ``DIGEST-MD5``. Therefore, we enable ``SCRAM-SHA-512``
 as an additional SASL authentication mechanism by updating the
 ``sasl-authentication-factory`` as follows:
 
