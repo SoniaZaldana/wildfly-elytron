@@ -54,6 +54,8 @@ import org.wildfly.security.auth.server.SecurityDomain;
 import org.wildfly.security.auth.server.SecurityRealm;
 import org.wildfly.security.auth.server.sasl.SaslAuthenticationFactory;
 import org.wildfly.security.authz.Attributes;
+import org.wildfly.security.auth.server.jwt.TokenConfiguration;
+import org.wildfly.security.authz.MapAttributes;
 import org.wildfly.security.credential.Credential;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.password.Password;
@@ -85,6 +87,7 @@ public class SaslServerBuilder {
     //Security domain info
     private String username;
     private Password password = NULL_PASSWORD;
+    private MapAttributes attributes;
     private String realmName = DEFAULT_REALM_NAME;
     private String defaultRealmName = realmName;
     private boolean modifiableRealm;
@@ -92,6 +95,7 @@ public class SaslServerBuilder {
     private Map<String, SimpleRealmEntry> passwordMap;
     private Map<String, SecurityRealm> realms = new HashMap<String, SecurityRealm>();
     private Map<String, MechanismRealmConfiguration> mechanismRealms = new LinkedHashMap<>();
+    private TokenConfiguration tokenConfiguration;
 
     //Server factory decorators
     private Map<String, Object> properties;
@@ -122,9 +126,11 @@ public class SaslServerBuilder {
         SaslServerBuilder copy = new SaslServerBuilder(serverFactoryClass, mechanismName);
         copy.username = username;
         copy.password = password;
+        copy.attributes = attributes;
         copy.realmName = realmName;
         copy.defaultRealmName = defaultRealmName;
         copy.modifiableRealm = modifiableRealm;
+        copy.tokenConfiguration = tokenConfiguration;
         if (permissionsMap != null) {
             copy.permissionsMap = new HashMap<>(permissionsMap);
         }
@@ -163,6 +169,12 @@ public class SaslServerBuilder {
     public SaslServerBuilder setPassword(Password password) {
         Assert.assertNotNull(this.password);
         this.password = password;
+        return this;
+    }
+
+    public SaslServerBuilder setAttributes(MapAttributes attributes) {
+        Assert.assertNotNull(attributes);
+        this.attributes = attributes;
         return this;
     }
 
@@ -279,6 +291,12 @@ public class SaslServerBuilder {
         return this;
     }
 
+    public SaslServerBuilder setTokenConfiguration(final TokenConfiguration tokenConfiguration) {
+        Assert.assertNotNull("tokenConfiguration", tokenConfiguration);
+        this.tokenConfiguration = tokenConfiguration;
+        return this;
+    }
+
     public SaslServerBuilder setDontAssertBuiltServer() {
         this.dontAssertBuiltServer = true;
         return this;
@@ -382,6 +400,9 @@ public class SaslServerBuilder {
             ModifiableRealmIdentity realmIdentity = mainRealm.getRealmIdentityForUpdate(new NamePrincipal(username));
             realmIdentity.create();
             realmIdentity.setCredentials(Collections.singletonList(new PasswordCredential(password)));
+            if (attributes != null) {
+                realmIdentity.setAttributes(attributes);
+            }
             realmIdentity.dispose();
 
             if (closeableReference != null) {
@@ -403,6 +424,9 @@ public class SaslServerBuilder {
         }
 
         domainBuilder.setDefaultRealmName(defaultRealmName);
+        if (tokenConfiguration != null) {
+            domainBuilder.setTokenConfiguration(tokenConfiguration);
+        }
 
         if (permissionsMap == null) {
             permissionsMap = new HashMap<>();

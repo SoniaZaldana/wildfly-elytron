@@ -54,6 +54,7 @@ import org.wildfly.security.auth.callback.CallbackUtil;
 import org.wildfly.security.auth.callback.ChannelBindingCallback;
 import org.wildfly.security.auth.callback.CredentialCallback;
 import org.wildfly.security.auth.callback.CredentialUpdateCallback;
+import org.wildfly.security.auth.callback.DynamicTokenCredentialCallback;
 import org.wildfly.security.auth.callback.EvidenceDecodePrincipalCallback;
 import org.wildfly.security.auth.callback.EvidenceVerifyCallback;
 import org.wildfly.security.auth.callback.ExclusiveNameCallback;
@@ -77,10 +78,12 @@ import org.wildfly.security.auth.server.event.RealmSuccessfulAuthenticationEvent
 import org.wildfly.security.auth.server.event.SecurityAuthenticationFailedEvent;
 import org.wildfly.security.auth.server.event.SecurityAuthenticationSuccessfulEvent;
 import org.wildfly.security.auth.server.event.SecurityRealmUnavailableEvent;
+import org.wildfly.security.auth.server.jwt.JwtUtils;
 import org.wildfly.security.authz.AggregateAttributes;
 import org.wildfly.security.authz.Attributes;
 import org.wildfly.security.authz.AuthorizationIdentity;
 import org.wildfly.security.authz.MapAttributes;
+import org.wildfly.security.credential.BearerTokenCredential;
 import org.wildfly.security.credential.Credential;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.credential.source.CredentialSource;
@@ -1143,6 +1146,18 @@ public final class ServerAuthenticationContext implements AutoCloseable {
                     log.tracef("Handling PrincipalAuthorizeCallback: principal = %s  authorized = %b", principal, authorized);
                     authorizeCallback.setAuthorized(authorized);
                     handleOne(callbacks, idx + 1);
+                } else if (callback instanceof DynamicTokenCredentialCallback) {
+                    // Dynamically issue JWT token and store it as private credential for security identity
+                    SecurityIdentity securityIdentity = getAuthorizedIdentity();
+                    SecurityDomain domain = getStateRef().get().getSecurityDomain();
+                    if (domain.getTokenConfiguration() != null) {
+                        try {
+                            String token = JwtUtils.issueJwtToken(securityIdentity, domain.getTokenConfiguration());
+                            addPrivateCredential(new BearerTokenCredential(token));
+                        } catch (Exception e) {
+                            ElytronMessages.log.unableToIssueJwtToken(e);
+                        }
+                    }
                 } else {
                     CallbackUtil.unsupported(callback);
                     handleOne(callbacks, idx + 1);

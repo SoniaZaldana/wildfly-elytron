@@ -32,6 +32,7 @@ import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 
 import org.wildfly.common.iteration.CodePointIterator;
+import org.wildfly.security.auth.callback.DynamicTokenCredentialCallback;
 import org.wildfly.security.auth.callback.EvidenceVerifyCallback;
 import org.wildfly.security.auth.callback.IdentityCredentialCallback;
 import org.wildfly.security.credential.PasswordCredential;
@@ -152,6 +153,11 @@ final class PlainSaslServer implements SaslServer, SaslWrapper {
 
         if (acb.isAuthorized() == true) {
             authorizedId = acb.getAuthorizedID();
+            try {
+                callbackHandler.handle(new Callback[] {new DynamicTokenCredentialCallback()});
+            } catch (Exception exception) {
+                // TODO add logging
+            }
         } else {
             throw saslPlain.mechAuthorizationFailed(loginName, authorizationId).toSaslException();
         }

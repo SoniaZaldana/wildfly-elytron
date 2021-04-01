@@ -86,6 +86,7 @@
         <version.jmockit>1.33</version.jmockit>
         <version.hsqldb>2.4.0</version.hsqldb>
         <version.org.glassfish.javax.json>1.0.4</version.org.glassfish.javax.json>
+        <version.bitbucket.jose4j>0.7.6</version.bitbucket.jose4j>
         <version.net.minidev.json-smart>2.3</version.net.minidev.json-smart>
         <version.com.nimbusds.nimbus-jose-jwt>8.2.1</version.com.nimbusds.nimbus-jose-jwt>
         <version.com.squareup.okhttp3.mockwebserver>3.8.1</version.com.squareup.okhttp3.mockwebserver>
@@ -843,6 +844,18 @@
                 <groupId>io.smallrye</groupId>
                 <artifactId>smallrye-jwt-cdi-extension</artifactId>
                 <version>${version.io.smallrye.jwt}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.smallrye</groupId>
+                <artifactId>smallrye-jwt-build</artifactId>
+                <version>${version.io.smallrye.jwt}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.bitbucket.b_c</groupId>
+                <artifactId>jose4j</artifactId>
+                <version>${version.bitbucket.jose4j}</version>
                 <scope>provided</scope>
             </dependency>
             <dependency>

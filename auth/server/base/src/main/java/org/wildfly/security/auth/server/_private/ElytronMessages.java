@@ -22,7 +22,9 @@ import static org.jboss.logging.Logger.Level.ERROR;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.NoSuchAlgorithmException;
 import java.security.Principal;
+import java.security.cert.CertificateException;
 
 import org.jboss.logging.BasicLogger;
 import org.jboss.logging.Logger;
@@ -34,6 +36,10 @@ import org.jboss.logging.annotations.Param;
 
 import org.jboss.logging.annotations.ValidIdRange;
 import org.jboss.logging.annotations.ValidIdRanges;
+import org.jose4j.jwt.GeneralJwtException;
+import org.jose4j.jwt.NumericDate;
+import org.wildfly.security.auth.server.jwt.LoadingKeyException;
+import org.wildfly.security.auth.server.jwt.ParseException;
 import org.wildfly.security.auth.server.RealmUnavailableException;
 import org.wildfly.security.authz.AuthorizationFailureException;
 
@@ -49,7 +55,8 @@ import org.wildfly.security.authz.AuthorizationFailureException;
     @ValidIdRange(min = 8, max = 8),
     @ValidIdRange(min = 1000, max = 1156),
     @ValidIdRange(min = 8510, max = 8511),
-    @ValidIdRange(min = 16000, max = 16999)
+    @ValidIdRange(min = 16000, max = 16999),
+    @ValidIdRange(min = 17000, max = 17999)
 })
 public interface ElytronMessages extends BasicLogger {
 
@@ -147,4 +154,42 @@ public interface ElytronMessages extends BasicLogger {
 
     @Message(id = 16002, value = "Can not handle SecurityEvent with SecurityIdentity from other SecurityDomain")
     IllegalArgumentException securityEventIdentityWrongDomain();
+
+    @Message(id = 17000, value = "Generated Certificate could not be stored in keystore")
+    CertificateException couldNotStoreCertificate(@Cause Throwable throwable);
+
+    @Message(id = 17001, value = "Keystore file does not exist")
+    IOException keystoreFileDoesNotExist(@Cause Throwable cause);
+
+    @Message(id = 17002, value = "No such algorithm found to check the integrity of the KeyStore")
+    NoSuchAlgorithmException noSuchAlgorithmToCheckKeyStoreIntegrity(@Cause Throwable cause);
+
+    @Message(id = 17003, value = "The Expiration Time (exp=%s) claim value cannot be less than Issued At (iat=%s) claim value")
+    ParseException failedToVerifyIatExp(NumericDate exp, NumericDate iat);
+
+    @Message(id = 17004, value = "Invalid 'iat' or 'exp' claim value")
+    ParseException invalidIatExp();
+
+    @Message(id = 17005, value = "The Expiration Time (exp=%s) claim value cannot be more than %d"
+            + " seconds in the future relative to Issued At (iat=%s) claim value")
+    ParseException expExceeded(NumericDate exp, long maxTimeToLiveSecs, NumericDate iat);
+
+    @Message(id = 17006, value = "Encrypted token sequence is invalid")
+    ParseException encryptedTokenSequenceInvalid(@Cause Throwable throwable);
+
+    @Message(id = 17007, value = "Failed to verify a token")
+    ParseException failedToVerifyToken(@Cause Throwable throwable);
+
+    @Message(id = 17008, value = "Failed to load public or private key from keystore")
+    LoadingKeyException failedToLoadKey(@Cause Throwable throwable);
+
+    @Message(id = 17009, value = "Unable to issue JWT")
+    GeneralJwtException unableToIssueJwtToken(@Cause Throwable throwable);
+
+    @LogMessage(level = Logger.Level.WARN)
+    @Message(id = 17010, value = "The value of (claim=%s) is not the expected type")
+    void invalidClaimValue(@Cause Throwable throwable, String claim);
+
+    @Message(id = 17011, value = "Missing keys to issue JWT token")
+    GeneralJwtException missingKeysToIssueJwt();
 }

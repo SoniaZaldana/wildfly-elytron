@@ -54,6 +54,7 @@ import org.wildfly.security.authz.PermissionMapper;
 import org.wildfly.security.authz.RoleDecoder;
 import org.wildfly.security.authz.RoleMapper;
 import org.wildfly.security.authz.Roles;
+import org.wildfly.security.auth.server.jwt.TokenConfiguration;
 import org.wildfly.security.credential.BearerTokenCredential;
 import org.wildfly.security.credential.Credential;
 import org.wildfly.security.credential.PasswordCredential;
@@ -101,6 +102,7 @@ public final class SecurityDomain {
     private final Consumer<SecurityEvent> securityEventListener;
     private final Function<Evidence, Principal> evidenceDecoder;
     private final RoleDecoder roleDecoder;
+    private final TokenConfiguration tokenConfiguration;
 
     SecurityDomain(Builder builder, final LinkedHashMap<String, RealmInfo> realmMap) {
         this.realmMap = realmMap;
@@ -115,6 +117,7 @@ public final class SecurityDomain {
         this.securityEventListener = builder.securityEventListener;
         this.evidenceDecoder = builder.evidenceDecoder;
         this.roleDecoder = builder.roleDecoder;
+        this.tokenConfiguration = builder.tokenConfiguration;
         final Map<String, RoleMapper> originalRoleMappers = builder.categoryRoleMappers;
         final Map<String, RoleMapper> copiedRoleMappers;
         if (originalRoleMappers.isEmpty()) {
@@ -210,6 +213,14 @@ public final class SecurityDomain {
         }
 
         CLASS_LOADER_DOMAIN_MAP.remove(classLoader);
+    }
+
+    /**
+     * Get the token configuration to dynamically issue JWT tokens during the authentication process
+     * @return the token configuration
+     */
+    public TokenConfiguration getTokenConfiguration() {
+        return this.tokenConfiguration;
     }
 
     /**
@@ -832,6 +843,7 @@ public final class SecurityDomain {
         private Consumer<SecurityEvent> securityEventListener = e -> {};
         private Function<Evidence, Principal> evidenceDecoder = evidence -> evidence.getDefaultPrincipal();
         private RoleDecoder roleDecoder = RoleDecoder.EMPTY;
+        private TokenConfiguration tokenConfiguration;
 
         Builder() {
         }
@@ -1063,6 +1075,18 @@ public final class SecurityDomain {
             Assert.checkNotNullParam("roleDecoder", roleDecoder);
             assertNotBuilt();
             this.roleDecoder = roleDecoder;
+            return this;
+        }
+
+        /**
+         * Set the token configuration for this security domain
+         * @param tokenConfiguration the token configuration (must not be {@code null}
+         * @return this builder
+         */
+        public Builder setTokenConfiguration(TokenConfiguration tokenConfiguration) {
+            Assert.checkNotNullParam("tokenConfiguration", tokenConfiguration);
+            assertNotBuilt();
+            this.tokenConfiguration = tokenConfiguration;
             return this;
         }
 
