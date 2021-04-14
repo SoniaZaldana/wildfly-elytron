@@ -127,6 +127,7 @@ public class DynamicJwtTest {
 
         // Default token configuration
         TokenConfiguration tokenConfig = TokenConfiguration.builder()
+                .setSecret("hsAjskfRrfndsAshfnsaDFDjhfdsbnmx")
                 .build();
 
         SecurityDomain domain = SecurityDomain.builder().setDefaultRealmName(REALM_NAME).addRealm(REALM_NAME, fileSystemSecurityRealm).build()

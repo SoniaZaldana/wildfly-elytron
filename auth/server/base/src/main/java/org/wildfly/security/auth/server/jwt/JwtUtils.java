@@ -36,6 +36,7 @@ import org.wildfly.common.Assert;
 import org.wildfly.security.auth.server.SecurityIdentity;
 import org.wildfly.security.auth.server._private.ElytronMessages;
 import org.wildfly.security.authz.Roles;
+import io.smallrye.jwt.algorithm.KeyEncryptionAlgorithm;
 import io.smallrye.jwt.build.Jwt;
 import io.smallrye.jwt.build.JwtClaimsBuilder;
 
@@ -71,17 +72,26 @@ public class JwtUtils {
                 .expiresIn(tokenConfiguration.getExpiryTime());
 
         if (tokenConfiguration.getSigningKey() != null && tokenConfiguration.getSignatureAlgorithm() != null) {
+            if (tokenConfiguration.getSecretKey() != null) {
+                // Inner sign and symmetric key encryption
+                return builder.jws().algorithm(tokenConfiguration.getSignatureAlgorithm())
+                        .innerSign(tokenConfiguration.getSigningKey())
+                        .keyAlgorithm(tokenConfiguration.getKeyEncryptionAlgorithm())
+                        .encrypt(tokenConfiguration.getSecretKey());
+            }
+
+
             if (tokenConfiguration.getEncryptionKey() != null && tokenConfiguration.getKeyEncryptionAlgorithm() != null) {
-                // We inner sign and encrypt
+                // Inner sign and asymmetric key encryption
                 return builder.jws().algorithm(tokenConfiguration.getSignatureAlgorithm())
                         .innerSign(tokenConfiguration.getSigningKey())
                         .keyAlgorithm(tokenConfiguration.getKeyEncryptionAlgorithm())
                         .encrypt(tokenConfiguration.getEncryptionKey());
-            } else {
-                // We just sign
-                return builder.jws().algorithm(tokenConfiguration.getSignatureAlgorithm())
-                        .sign(tokenConfiguration.getSigningKey());
             }
+
+            return builder.jws().algorithm(tokenConfiguration.getSignatureAlgorithm())
+                        .sign(tokenConfiguration.getSigningKey());
+
         }
         throw ElytronMessages.log.missingKeysToIssueJwt();
     }
@@ -97,8 +107,10 @@ public class JwtUtils {
         Assert.assertNotNull(tokenConfiguration);
 
         String tokenSequence = token;
-        if (tokenConfiguration.getDecryptionKey() != null && tokenConfiguration.getKeyEncryptionAlgorithm() != null) {
-            tokenSequence = decryptSignedToken(token, tokenConfiguration);
+        if (tokenConfiguration.getSecretKey() != null) {
+            tokenSequence = decryptSignedToken(token, tokenConfiguration, true);
+        } else if (tokenConfiguration.getDecryptionKey() != null && tokenConfiguration.getKeyEncryptionAlgorithm() != null) {
+            tokenSequence = decryptSignedToken(token, tokenConfiguration, false);
         }
 
         JwtContext jwtContext = parseClaims(tokenSequence, tokenConfiguration);
@@ -152,14 +164,17 @@ public class JwtUtils {
 
     }
 
-    private static String decryptSignedToken(String token, TokenConfiguration tokenConfiguration) throws ParseException {
+    private static String decryptSignedToken(String token, TokenConfiguration tokenConfiguration, boolean isSymmetric) throws ParseException {
         try {
             JsonWebEncryption jwe = new JsonWebEncryption();
             jwe.setAlgorithmConstraints(
                     new AlgorithmConstraints(AlgorithmConstraints.ConstraintType.PERMIT,
                             tokenConfiguration.getKeyEncryptionAlgorithm().getAlgorithm()));
-
-            jwe.setKey(tokenConfiguration.getDecryptionKey());
+            if (isSymmetric) {
+                jwe.setKey(tokenConfiguration.getSecretKey());
+            } else {
+                jwe.setKey(tokenConfiguration.getDecryptionKey());
+            }
             jwe.setCompactSerialization(token);
             return jwe.getPlaintextString();
         } catch (JoseException e) {

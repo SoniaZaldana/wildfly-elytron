@@ -34,12 +34,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import javax.crypto.SecretKey;
 import javax.security.auth.x500.X500Principal;
 import org.wildfly.common.Assert;
 import org.wildfly.security.auth.server.SecurityDomain;
 import org.wildfly.security.x500.cert.SelfSignedX509CertificateAndSigningKey;
 import io.smallrye.jwt.algorithm.KeyEncryptionAlgorithm;
 import io.smallrye.jwt.algorithm.SignatureAlgorithm;
+import io.smallrye.jwt.util.KeyUtils;
 
 /**
  * A token configuration class which holds information regarding dynamic token issuance
@@ -65,6 +67,7 @@ public class TokenConfiguration {
     private PrivateKey decryptionKey;
     private PublicKey verificationKey;
     private PrivateKey signingKey;
+    private SecretKey secretKey;
 
     private final String SIGNING_DN = "cn=WildFly Elytron Signing";
     private final String ENCRYPTION_DN = "cn=WildFly Elytron Encryption";
@@ -99,6 +102,14 @@ public class TokenConfiguration {
             this.keyStorePassword = builder.keyStorePassword;
             this.encryptionAlias = builder.encryptionAlias;
             this.signingAlias = builder.signingAlias;
+        }
+
+        if (builder.secret != null) {
+            // If using symmetric encryption and algorithm not specified, we want to use another default
+            if (builder.keyEncryptionAlgorithm == null) {
+                this.keyEncryptionAlgorithm = KeyEncryptionAlgorithm.A256KW;
+            }
+            this.secretKey = KeyUtils.createSecretKeyFromSecret(builder.secret);
         }
 
         // Store keystore along with encryption and signing key pairs.
@@ -165,6 +176,10 @@ public class TokenConfiguration {
 
     public PrivateKey getSigningKey() {
         return this.signingKey;
+    }
+
+    public SecretKey getSecretKey() {
+        return this.secretKey;
     }
 
     private KeyStore loadKeyStore(Path keyStorePath, String password) throws Exception {
@@ -236,6 +251,7 @@ public class TokenConfiguration {
         private SignatureAlgorithm signatureAlgorithm;
         private KeyEncryptionAlgorithm keyEncryptionAlgorithm;
         private int keySize;
+        private String secret;
 
 
         Builder() {
@@ -356,6 +372,16 @@ public class TokenConfiguration {
         public Builder setKeySize(int keySize) {
             Assert.assertNotNull(keySize);
             this.keySize = keySize;
+            return this;
+        }
+
+        /**
+         * Set a secret if symmetric encryption is desired
+         * @return this builder
+         * @param secret
+         */
+        public Builder setSecret(String secret) {
+            this.secret = secret;
             return this;
         }
 
