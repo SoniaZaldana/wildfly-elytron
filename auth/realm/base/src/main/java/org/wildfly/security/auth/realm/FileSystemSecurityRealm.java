@@ -38,13 +38,7 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.security.AccessController;
-import java.security.KeyFactory;
-import java.security.NoSuchAlgorithmException;
-import java.security.Principal;
-import java.security.PrivilegedAction;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
+import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -64,6 +58,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
+import javax.crypto.SecretKey;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -102,7 +97,7 @@ import org.wildfly.security.password.spec.OneTimePasswordSpec;
 import org.wildfly.security.password.spec.PasswordSpec;
 import org.wildfly.security.password.util.ModularCrypt;
 import org.wildfly.security.permission.ElytronPermission;
-
+import org.wildfly.security.encryption.CipherUtil;
 /**
  * A simple filesystem-backed security realm.
  *
@@ -120,6 +115,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
     private final boolean encoded;
     private final Charset hashCharset;
     private final Encoding hashEncoding;
+    private final SecretKey secretKey;
 
     private final ConcurrentHashMap<String, IdentitySharedExclusiveLock> realmIdentityLocks = new ConcurrentHashMap<>();
 
@@ -134,8 +130,10 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param encoded whether identity names should be BASE32 encoded before using as filename
      * @param hashCharset the character set to use when converting password strings to a byte array. Uses UTF-8 by default.
      * @param hashEncoding the string format for the hashed passwords. Uses Base64 by default.
+     * @param secretKey the symmetric SecretKey used to encrypt and decrypt the
      */
-    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, final boolean encoded, final Encoding hashEncoding, final Charset hashCharset) {
+    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, final boolean encoded, final Encoding hashEncoding, final Charset hashCharset, final SecretKey secretKey
+    ) {
         final SecurityManager sm = System.getSecurityManager();
         if (sm != null) {
             sm.checkPermission(CREATE_SECURITY_REALM);
@@ -146,6 +144,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         this.encoded = encoded;
         this.hashCharset = hashCharset != null ? hashCharset : StandardCharsets.UTF_8;
         this.hashEncoding = hashEncoding != null ? hashEncoding : Encoding.BASE64;
+        this.secretKey = secretKey;
     }
 
     /**
@@ -158,8 +157,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param levels the number of levels of directory hashing to apply
      * @param encoded whether identity names should by BASE32 encoded before using as filename
      */
-    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, final boolean encoded) {
-        this(root, nameRewriter, levels, encoded, Encoding.BASE64, StandardCharsets.UTF_8);
+    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, final boolean encoded, SecretKey secretKey) {
+        this(root, nameRewriter, levels, encoded, Encoding.BASE64, StandardCharsets.UTF_8, secretKey);
     }
 
     /**
@@ -169,8 +168,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param nameRewriter the name rewriter to apply to looked up names
      * @param levels the number of levels of directory hashing to apply
      */
-    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels) {
-        this(root, nameRewriter, levels, true);
+    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, SecretKey secretKey) {
+        this(root, nameRewriter, levels, true, secretKey);
     }
 
     /**
@@ -182,8 +181,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param hashEncoding the string format for hashed passwords. Uses Base64 by default.
      * @param hashCharset the character set to use when converting password strings to a byte array. Uses UTF-8 by default and must not be {@code null}.
      */
-    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, final Encoding hashEncoding, final Charset hashCharset) {
-        this(root, nameRewriter, levels, true, hashEncoding, hashCharset);
+    public FileSystemSecurityRealm(final Path root, final NameRewriter nameRewriter, final int levels, final Encoding hashEncoding, final Charset hashCharset, SecretKey secretKey) {
+        this(root, nameRewriter, levels, true, hashEncoding, hashCharset, secretKey);
     }
 
     /**
@@ -192,8 +191,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param root the root path of the identity store
      * @param levels the number of levels of directory hashing to apply
      */
-    public FileSystemSecurityRealm(final Path root, final int levels) {
-        this(root, NameRewriter.IDENTITY_REWRITER, levels, true);
+    public FileSystemSecurityRealm(final Path root, final int levels, SecretKey secretKey) {
+        this(root, NameRewriter.IDENTITY_REWRITER, levels, true, secretKey);
     }
 
     /**
@@ -204,8 +203,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param hashEncoding the string format for hashed passwords. Uses Base64 by default.
      * @param hashCharset the character set to use when converting password strings to a byte array. Uses UTF-8 by default and must not be {@code null}.
      */
-    public FileSystemSecurityRealm(final Path root, final int levels, final Encoding hashEncoding, final Charset hashCharset) {
-        this(root, NameRewriter.IDENTITY_REWRITER, levels, true, hashEncoding, hashCharset);
+    public FileSystemSecurityRealm(final Path root, final int levels, final Encoding hashEncoding, final Charset hashCharset, SecretKey secretKey) {
+        this(root, NameRewriter.IDENTITY_REWRITER, levels, true, hashEncoding, hashCharset, secretKey);
     }
 
     /**
@@ -213,8 +212,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      *
      * @param root the root path of the identity store
      */
-    public FileSystemSecurityRealm(final Path root) {
-        this(root, NameRewriter.IDENTITY_REWRITER, 2, true);
+    public FileSystemSecurityRealm(final Path root, SecretKey secretKey) {
+        this(root, NameRewriter.IDENTITY_REWRITER, 2, true, secretKey);
     }
 
     /**
@@ -224,27 +223,26 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
      * @param hashEncoding the string format for hashed passwords. Uses Base64 by default.
      * @param hashCharset the character set to use when converting password strings to a byte array. Uses UTF-8 by default and must not be {@code null}
      */
-    public FileSystemSecurityRealm(final Path root, final Encoding hashEncoding, final Charset hashCharset) {
-        this(root, NameRewriter.IDENTITY_REWRITER, 2, true, hashEncoding, hashCharset);
+    public FileSystemSecurityRealm(final Path root, final Encoding hashEncoding, final Charset hashCharset, SecretKey secretKey) {
+        this(root, NameRewriter.IDENTITY_REWRITER, 2, true, hashEncoding, hashCharset, secretKey);
     }
 
-    private Path pathFor(String name) {
+    private Path pathFor(String name) throws GeneralSecurityException{
         assert name.codePointCount(0, name.length()) > 0;
         String normalizedName = name;
-
         if (encoded) {
             normalizedName = Normalizer.normalize(name, Normalizer.Form.NFKC)
                     .toLowerCase(Locale.ROOT)
                     .replaceAll("[^a-z0-9]", "_");
         }
-
+        String encryptedName = CipherUtil.encrypt(normalizedName, this.secretKey);
         Path path = root;
         int idx = 0;
         for (int level = 0; level < levels; level ++) {
-            int newIdx = normalizedName.offsetByCodePoints(idx, 1);
-            path = path.resolve(normalizedName.substring(idx, newIdx));
+            int newIdx = encryptedName.offsetByCodePoints(idx, 1);
+            path = path.resolve(encryptedName.substring(idx, newIdx));
             idx = newIdx;
-            if (idx == normalizedName.length()) {
+            if (idx == encryptedName.length()) {
                 break;
             }
         }
@@ -252,7 +250,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         if (encoded) {
             String base32 = ByteIterator.ofBytes(new ByteStringBuilder().append(name).toArray())
                     .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
-            name = normalizedName + "-" + base32;
+            name = encryptedName;
+//            name = normalizedName + "-" + base32;
         }
 
         return path.resolve(name + ".xml");
@@ -276,11 +275,23 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
     }
 
     public RealmIdentity getRealmIdentity(final Principal principal) {
-        return principal instanceof NamePrincipal ? getRealmIdentity(principal.getName(), false) : RealmIdentity.NON_EXISTENT;
+        try{
+            if(principal instanceof NamePrincipal){ return getRealmIdentity(principal.getName(), false); }
+            else{ return RealmIdentity.NON_EXISTENT; }
+        }catch(GeneralSecurityException e){
+            e.printStackTrace();
+            return null;
+        }
     }
 
-    public ModifiableRealmIdentity getRealmIdentityForUpdate(final Principal principal) {
-        return principal instanceof NamePrincipal ? getRealmIdentity(principal.getName(), true) : ModifiableRealmIdentity.NON_EXISTENT;
+    public ModifiableRealmIdentity getRealmIdentityForUpdate(final Principal principal){
+        try{
+            if(principal instanceof NamePrincipal){ return getRealmIdentity(principal.getName(), true); }
+            else{ return ModifiableRealmIdentity.NON_EXISTENT; }
+        }catch(GeneralSecurityException e){
+            e.printStackTrace();
+            return null;
+        }
     }
 
     @Override
@@ -288,7 +299,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         // no need to register the listener given that changes to identities are done through the realm
     }
 
-    private ModifiableRealmIdentity getRealmIdentity(final String name, final boolean exclusive) {
+    private ModifiableRealmIdentity getRealmIdentity(final String name, final boolean exclusive) throws GeneralSecurityException{
         final String finalName = nameRewriter.rewriteName(name);
         if (finalName == null) {
             throw ElytronMessages.log.invalidName();
@@ -336,7 +347,12 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                 public ModifiableRealmIdentity next() {
                     final Path path = iterator.next();
                     final String name = nameFor(path.getFileName());
-                    return getRealmIdentityForUpdate(new NamePrincipal(name));
+                    try {
+                        return getRealmIdentityForUpdate(new NamePrincipal(name));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        return null;
+                    }
                 }
 
                 public void close() throws RealmUnavailableException {

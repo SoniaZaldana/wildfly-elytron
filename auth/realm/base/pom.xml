@@ -113,6 +113,10 @@
             <artifactId>wildfly-elytron-x500-principal</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.wildfly.security</groupId>
+            <artifactId>wildfly-elytron-encryption</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

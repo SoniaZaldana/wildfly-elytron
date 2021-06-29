@@ -49,6 +49,7 @@ import org.wildfly.security.password.spec.EncryptablePasswordSpec;
 import org.wildfly.security.password.spec.IteratedSaltedPasswordAlgorithmSpec;
 import org.wildfly.security.password.spec.OneTimePasswordSpec;
 import org.wildfly.security.password.spec.SaltedPasswordAlgorithmSpec;
+import org.wildfly.security.encryption.SecretKeyUtil;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,6 +61,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.GeneralSecurityException;
 import java.security.Provider;
 import java.security.Security;
 import java.util.ArrayList;
@@ -76,6 +78,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.wildfly.security.password.interfaces.BCryptPassword.BCRYPT_SALT_SIZE;
 
+import javax.crypto.SecretKey;
+
 /**
  * @author <a href="mailto:psilva@redhat.com">Pedro Igor</a>
  */
@@ -83,6 +87,10 @@ import static org.wildfly.security.password.interfaces.BCryptPassword.BCRYPT_SAL
 public class FileSystemSecurityRealmTest {
 
     private static final Provider provider = WildFlyElytronPasswordProvider.getInstance();
+    SecretKey key = SecretKeyUtil.generateSecretKey(8);
+
+    public FileSystemSecurityRealmTest() throws GeneralSecurityException {
+    }
 
     @BeforeClass
     public static void onBefore() throws Exception {
@@ -96,7 +104,8 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCreateIdentityWithNoLevels() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 0);
+
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 0, key);
         ModifiableRealmIdentity identity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
 
         assertFalse(identity.exists());
@@ -108,7 +117,7 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCreateIdentityWithLevels() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 9, key);
         ModifiableRealmIdentity identity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
 
         identity.create();
@@ -119,12 +128,12 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCreateAndLoadIdentity() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         newIdentity.create();
         newIdentity.dispose();
 
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 3);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 3, key);
         ModifiableRealmIdentity existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         assertTrue(existingIdentity.exists());
         existingIdentity.dispose();
@@ -132,9 +141,10 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testShortUsername() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("p"));
         newIdentity.create();
+
         newIdentity.dispose();
 
         ModifiableRealmIdentity existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("p"));
@@ -144,7 +154,7 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testSpecialCharacters() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("special*.\"/\\[]:;|=,用戶 "));
         newIdentity.create();
         newIdentity.dispose();
@@ -156,7 +166,7 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCaseSensitive() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         newIdentity.create();
         assertTrue(newIdentity.exists());
@@ -169,19 +179,19 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCreateAndLoadAndDeleteIdentity() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 3, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         newIdentity.create();
         newIdentity.dispose();
 
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 3);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 3, key);
         ModifiableRealmIdentity existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         assertTrue(existingIdentity.exists());
         existingIdentity.delete();
         assertFalse(existingIdentity.exists());
         existingIdentity.dispose();
 
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 3);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 3, key);
         existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         assertFalse(existingIdentity.exists());
         existingIdentity.dispose();
@@ -189,7 +199,7 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCreateIdentityWithAttributes() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
 
         newIdentity.create();
@@ -202,7 +212,7 @@ public class FileSystemSecurityRealmTest {
         newIdentity.setAttributes(newAttributes);
         newIdentity.dispose();
 
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1, key);
 
         ModifiableRealmIdentity existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         AuthorizationIdentity authorizationIdentity = existingIdentity.getAuthorizationIdentity();
@@ -401,7 +411,7 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCreateIdentityWithEverything() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
 
         newIdentity.create();
@@ -434,7 +444,7 @@ public class FileSystemSecurityRealmTest {
         newIdentity.setCredentials(credentials);
         newIdentity.dispose();
 
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1, key);
         ModifiableRealmIdentity existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         assertTrue(existingIdentity.exists());
         assertTrue(existingIdentity.verifyEvidence(new PasswordGuessEvidence("secretPassword".toCharArray())));
@@ -458,7 +468,7 @@ public class FileSystemSecurityRealmTest {
 
     @Test
     public void testCredentialReplacing() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1, key);
         ModifiableRealmIdentity identity1 = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("testingUser"));
         identity1.create();
 
@@ -482,7 +492,7 @@ public class FileSystemSecurityRealmTest {
         identity1.dispose();
 
         // checking result
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1, key);
         ModifiableRealmIdentity identity3 = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("testingUser"));
 
         assertTrue(identity3.exists());
@@ -491,7 +501,7 @@ public class FileSystemSecurityRealmTest {
     }
 
     private FileSystemSecurityRealm createRealmWithTwoIdentities() throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1, key);
         ModifiableRealmIdentity identity1 = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("firstUser"));
         identity1.create();
         identity1.dispose();
@@ -557,13 +567,13 @@ public class FileSystemSecurityRealmTest {
     }
 
     private void assertCreateIdentityWithPassword(char[] actualPassword, Password credential, Encoding hashEncoding, Charset hashCharset) throws Exception {
-        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1, hashEncoding, hashCharset);
+        FileSystemSecurityRealm securityRealm = new FileSystemSecurityRealm(getRootPath(), 1, hashEncoding, hashCharset, key);
         ModifiableRealmIdentity newIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         newIdentity.create();
         newIdentity.setCredentials(Collections.singleton(new PasswordCredential(credential)));
         newIdentity.dispose();
 
-        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1, hashEncoding, hashCharset);
+        securityRealm = new FileSystemSecurityRealm(getRootPath(false), 1, hashEncoding, hashCharset, key);
         ModifiableRealmIdentity existingIdentity = securityRealm.getRealmIdentityForUpdate(new NamePrincipal("plainUser"));
         assertTrue(existingIdentity.exists());
         assertTrue(existingIdentity.verifyEvidence(new PasswordGuessEvidence(actualPassword)));
