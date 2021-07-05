@@ -94,7 +94,6 @@ import org.wildfly.security.credential.Credential;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.credential.PublicKeyCredential;
 import org.wildfly.security.credential.X509CertificateChainPublicCredential;
-import org.wildfly.security.encryption.SecretKeyUtil;
 import org.wildfly.security.evidence.Evidence;
 import org.wildfly.security.password.Password;
 import org.wildfly.security.password.PasswordFactory;
@@ -334,14 +333,13 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                     .toLowerCase(Locale.ROOT)
                     .replaceAll("[^a-z0-9]", "_");
         }
-        String encryptedName = CipherUtil.encrypt(normalizedName, this.secretKey);
         Path path = root;
         int idx = 0;
         for (int level = 0; level < levels; level ++) {
-            int newIdx = encryptedName.offsetByCodePoints(idx, 1);
-            path = path.resolve(encryptedName.substring(idx, newIdx));
+            int newIdx = normalizedName.offsetByCodePoints(idx, 1);
+            path = path.resolve(normalizedName.substring(idx, newIdx));
             idx = newIdx;
-            if (idx == encryptedName.length()) {
+            if (idx == normalizedName.length()) {
                 break;
             }
         }
@@ -349,8 +347,10 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         if (encoded) {
             String base32 = ByteIterator.ofBytes(new ByteStringBuilder().append(name).toArray())
                     .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
-            name = encryptedName;
-//            name = normalizedName + "-" + base32;
+            name = normalizedName + "-" + base32;
+        }
+        if(this.secretKey != null){
+            name = CipherUtil.encrypt(normalizedName, this.secretKey);
         }
 
         return path.resolve(name + ".xml");
