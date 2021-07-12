@@ -38,7 +38,13 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.security.*;
+import java.security.AccessController;
+import java.security.KeyFactory;
+import java.security.NoSuchAlgorithmException;
+import java.security.Principal;
+import java.security.PrivilegedAction;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -58,7 +64,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
-import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLOutputFactory;
@@ -320,11 +325,13 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
     private Path pathFor(String name) throws GeneralSecurityException{
         assert name.codePointCount(0, name.length()) > 0;
         String normalizedName = name;
+
         if (encoded) {
             normalizedName = Normalizer.normalize(name, Normalizer.Form.NFKC)
                     .toLowerCase(Locale.ROOT)
                     .replaceAll("[^a-z0-9]", "_");
         }
+
         Path path = root;
         int idx = 0;
         for (int level = 0; level < levels; level ++) {
@@ -335,11 +342,13 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                 break;
             }
         }
+
         if (encoded) {
             String base32 = ByteIterator.ofBytes(new ByteStringBuilder().append(name).toArray())
                     .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
             name = normalizedName + "-" + base32;
         }
+        
         return path.resolve(name + ".xml");
     }
 
