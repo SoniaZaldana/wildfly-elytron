@@ -94,7 +94,7 @@ public class CipherUtil {
             byte[] iv = byteIterator.drain(ivLength);
             byte[] cipherText = byteIterator.drain();
 
-            // We successfully disected the token, now decrypt the value.
+            // We successfully dissected the token, now decrypt the value.
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             AlgorithmParameterSpec spec = new IvParameterSpec(iv);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
