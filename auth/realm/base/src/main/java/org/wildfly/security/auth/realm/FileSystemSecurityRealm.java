@@ -45,6 +45,7 @@ import java.security.Principal;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.security.GeneralSecurityException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -96,6 +97,7 @@ import org.wildfly.security.credential.X509CertificateChainPublicCredential;
 import org.wildfly.security.evidence.Evidence;
 import org.wildfly.security.password.Password;
 import org.wildfly.security.password.PasswordFactory;
+import org.wildfly.security.password.interfaces.ClearPassword;
 import org.wildfly.security.password.interfaces.OneTimePassword;
 import org.wildfly.security.password.spec.BasicPasswordSpecEncoding;
 import org.wildfly.security.password.spec.Encoding;
@@ -321,8 +323,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
     public FileSystemSecurityRealm(final Path root, final Encoding hashEncoding, final Charset hashCharset, SecretKey secretKey) {
         this(root, NameRewriter.IDENTITY_REWRITER, 2, true, hashEncoding, hashCharset, secretKey);
     }
-//TODO: Figure out what to do here for the encoding of username
-    private Path pathFor(String name) throws GeneralSecurityException{
+//TODO: Hash and Encode with BASE32
+    private Path pathFor(String name) {
         assert name.codePointCount(0, name.length()) > 0;
         String normalizedName = name;
 
@@ -348,7 +350,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                     .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
             name = normalizedName + "-" + base32;
         }
-        
+
         return path.resolve(name + ".xml");
     }
 
@@ -415,7 +417,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         }
     }
 
-    public ModifiableRealmIdentityIterator getRealmIdentityIterator() throws RealmUnavailableException {
+    public ModifiableRealmIdentityIterator getRealmIdentityIterator() {
         return subIterator(root, levels);
     }
 
@@ -546,6 +548,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
 
     static class Identity implements ModifiableRealmIdentity {
 
+        private static final String ENCRYPTION_FORMAT = "secretkey_base64";
         private static final String BASE64_FORMAT = "base64";
         private static final String MCF_FORMAT = "crypt";
         private static final String X509_FORMAT = "X.509";
@@ -640,7 +643,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                     boolean verified = false;
                     if (credential instanceof PasswordCredential) {
                         if(this.secretKey != null){
-                            verified = ((PasswordCredential )credential).verify(evidence, hashCharset, secretKey);
+                            verified = ((PasswordCredential )credential).verify(evidence, hashCharset);
                         } else {
                             verified = ((PasswordCredential) credential).verify(evidence, hashCharset);
                         }
@@ -775,7 +778,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                 return null;
             }
         }
-//      TODO: Encrypt Password
+
         public void setCredentials(final Collection<? extends Credential> credentials) throws RealmUnavailableException {
             Assert.checkNotNullParam("credential", credentials);
             final LoadedIdentity loadedIdentity = loadIdentity(false, false);
@@ -886,7 +889,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
             }
         }
 
-        private void writeIdentity(final XMLStreamWriter streamWriter, final LoadedIdentity newIdentity) throws XMLStreamException, InvalidKeySpecException, NoSuchAlgorithmException, CertificateEncodingException, GeneralSecurityException {
+        private void writeIdentity(final XMLStreamWriter streamWriter, final LoadedIdentity newIdentity) throws XMLStreamException, GeneralSecurityException {
             streamWriter.writeStartDocument();
             streamWriter.writeCharacters("\n");
             streamWriter.writeStartElement("identity");
@@ -914,9 +917,9 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                             String algorithm = password.getAlgorithm();
                             String passwordString;
                             byte[] encoded = BasicPasswordSpecEncoding.encode(password);
-                            if(this.secretKey != null){
-                                format = BASE64_FORMAT;
-                                passwordString = CipherUtil.encrypt(password.toString(), this.secretKey);
+                            if (this.secretKey != null) {
+                                format = ENCRYPTION_FORMAT;
+                                passwordString = CipherUtil.encrypt(new String(encoded), this.secretKey);
                             } else if (encoded != null) {
                                 if (newIdentity.getHashEncoding() == Encoding.HEX) {
                                     format = HEX;
@@ -1149,7 +1152,21 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         private void parsePassword(final List<Credential> credentials, final XMLStreamReader streamReader) throws XMLStreamException, RealmUnavailableException {
             parseCredential(streamReader, (algorithm, format, text) -> {
                 try {
-                    if (BASE64_FORMAT.equals(format) || HEX.equals(format)) {
+                    if (ENCRYPTION_FORMAT.equals(format)) {
+                        if (algorithm == null) {
+                            throw ElytronMessages.log.fileSystemRealmMissingAttribute("algorithm", path, streamReader.getLocation().getLineNumber(), name);
+                        }
+                        PasswordFactory passwordFactory = PasswordFactory.getInstance(algorithm);
+                        String decryptedText = CipherUtil.decrypt(text, secretKey);
+                        byte[] passwordBytes = decryptedText.getBytes();
+                        PasswordSpec passwordSpec = BasicPasswordSpecEncoding.decode(passwordBytes);
+
+                        if (passwordSpec != null) {
+                            credentials.add(new PasswordCredential(passwordFactory.generatePassword(passwordSpec)));
+                        } else {
+                            throw ElytronMessages.log.fileSystemRealmInvalidPasswordAlgorithm(algorithm, path, streamReader.getLocation().getLineNumber(), name);
+                        }
+                    } else if (BASE64_FORMAT.equals(format) || HEX.equals(format)) {
                         if (algorithm == null) {
                             throw ElytronMessages.log.fileSystemRealmMissingAttribute("algorithm", path, streamReader.getLocation().getLineNumber(), name);
                         }
@@ -1174,6 +1191,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                     }
                 } catch (InvalidKeySpecException | NoSuchAlgorithmException e) {
                     throw ElytronMessages.log.fileSystemRealmInvalidContent(path, streamReader.getLocation().getLineNumber(), name);
+                } catch (GeneralSecurityException e) {
+                    e.printStackTrace();
                 }
             });
         }

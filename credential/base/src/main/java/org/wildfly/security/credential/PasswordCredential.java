@@ -146,13 +146,9 @@ public final class PasswordCredential implements AlgorithmCredential {
      *
      * @return {@code true} if the evidence is verified, {@code false} otherwise
      */
-
     public boolean verify(final Evidence evidence, Charset hashCharset) {
-            return verify(INSTALLED_PROVIDERS, evidence, hashCharset);
+        return verify(INSTALLED_PROVIDERS, evidence, hashCharset);
     }
-
-
-
 
     public PasswordCredential clone() {
         final Password password = this.password;
