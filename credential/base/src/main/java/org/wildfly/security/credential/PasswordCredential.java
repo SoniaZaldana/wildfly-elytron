@@ -23,7 +23,6 @@ import static org.wildfly.security.provider.util.ProviderUtil.INSTALLED_PROVIDER
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
@@ -31,14 +30,11 @@ import java.security.spec.AlgorithmParameterSpec;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-import javax.crypto.SecretKey;
 import org.wildfly.common.Assert;
-import org.wildfly.security.encryption.ElytronMessages;
 import org.wildfly.security.evidence.Evidence;
 import org.wildfly.security.evidence.PasswordGuessEvidence;
 import org.wildfly.security.password.Password;
 import org.wildfly.security.password.PasswordFactory;
-import org.wildfly.security.encryption.CipherUtil;
 
 /**
  * A credential for password authentication.
@@ -130,36 +126,14 @@ public final class PasswordCredential implements AlgorithmCredential {
      *
      * @return {@code true} if the evidence is verified, {@code false} otherwise
      */
-    public boolean verify(final Supplier<Provider[]> providerSupplier, final Evidence evidence, Charset hashCharset, SecretKey secretKey) throws GeneralSecurityException {
+    public boolean verify(final Supplier<Provider[]> providerSupplier, final Evidence evidence, Charset hashCharset) {
         Assert.checkNotNullParam("providerSupplier", providerSupplier);
         Assert.checkNotNullParam("evidence", evidence);
         Assert.checkNotNullParam("hashCharset", hashCharset);
         if (evidence instanceof PasswordGuessEvidence) try {
             final PasswordFactory factory = PasswordFactory.getInstance(password.getAlgorithm(), providerSupplier);
-            if(secretKey != null) {
-                return factory.verify(factory.translate(password), CipherUtil.decrypt(String.valueOf(( (PasswordGuessEvidence) evidence).getGuess()), secretKey).toCharArray(), hashCharset);
-            }
             return factory.verify(factory.translate(password), ((PasswordGuessEvidence) evidence).getGuess(), hashCharset);
         } catch (NoSuchAlgorithmException | InvalidKeyException ignored) {
-        }
-        return false;
-    }
-
-    public boolean verify(final Supplier<Provider[]> providerSupplier, final Evidence evidence, Charset hashCharset) {
-        try {
-            return verify(providerSupplier, evidence, hashCharset, null);
-        } catch (GeneralSecurityException e){
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-
-    public boolean verify(final Evidence evidence, Charset hashCharset, SecretKey secretKey) {
-        try {
-            return verify(INSTALLED_PROVIDERS, evidence, hashCharset, secretKey);
-        } catch (GeneralSecurityException e){
-            e.printStackTrace();
         }
         return false;
     }
@@ -172,9 +146,13 @@ public final class PasswordCredential implements AlgorithmCredential {
      *
      * @return {@code true} if the evidence is verified, {@code false} otherwise
      */
+
     public boolean verify(final Evidence evidence, Charset hashCharset) {
-        return verify(INSTALLED_PROVIDERS, evidence, hashCharset);
+            return verify(INSTALLED_PROVIDERS, evidence, hashCharset);
     }
+
+
+
 
     public PasswordCredential clone() {
         final Password password = this.password;
