@@ -793,7 +793,6 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
             }
         }
 
-//      TODO: Encrypt Attributes
         public void setAttributes(final Attributes attributes) throws RealmUnavailableException {
             Assert.checkNotNullParam("attributes", attributes);
             final LoadedIdentity loadedIdentity = loadIdentity(false, true);
@@ -808,7 +807,6 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
             }
         }
 
-//      TODO: Decrypt Attributes when fetching
         @Override
         public Attributes getAttributes() throws RealmUnavailableException {
             final LoadedIdentity loadedIdentity = loadIdentity(true, false);
@@ -917,6 +915,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                             String algorithm = password.getAlgorithm();
                             String passwordString;
                             byte[] encoded = BasicPasswordSpecEncoding.encode(password);
+
                             if (this.secretKey != null) {
                                 format = ENCRYPTION_FORMAT;
                                 passwordString = CipherUtil.encrypt(new String(encoded), this.secretKey);
@@ -953,8 +952,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                     for (String value : entry) {
                         streamWriter.writeCharacters("\n        ");
                         streamWriter.writeStartElement("attribute");
-                        streamWriter.writeAttribute("name", entry.getKey());
-                        streamWriter.writeAttribute("value", value);
+                        streamWriter.writeAttribute("name", CipherUtil.encrypt(entry.getKey(), this.secretKey));
+                        streamWriter.writeAttribute("value", CipherUtil.encrypt(value, this.secretKey));
                         streamWriter.writeEndElement();
                     }
                 } while (entryIter.hasNext());
@@ -1290,7 +1289,11 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
             if (value == null) {
                 throw ElytronMessages.log.fileSystemRealmMissingAttribute("value", path, streamReader.getLocation().getLineNumber(), this.name);
             }
-            attributes.addLast(name, value);
+            try {
+                attributes.addLast(CipherUtil.decrypt(name, this.secretKey), CipherUtil.decrypt(value, this.secretKey));
+            } catch (GeneralSecurityException e){
+                e.printStackTrace();
+            }
             if (streamReader.nextTag() != END_ELEMENT) {
                 throw ElytronMessages.log.fileSystemRealmInvalidContent(path, streamReader.getLocation().getLineNumber(), this.name);
             }
