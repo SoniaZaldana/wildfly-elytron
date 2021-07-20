@@ -97,7 +97,6 @@ import org.wildfly.security.credential.X509CertificateChainPublicCredential;
 import org.wildfly.security.evidence.Evidence;
 import org.wildfly.security.password.Password;
 import org.wildfly.security.password.PasswordFactory;
-import org.wildfly.security.password.interfaces.ClearPassword;
 import org.wildfly.security.password.interfaces.OneTimePassword;
 import org.wildfly.security.password.spec.BasicPasswordSpecEncoding;
 import org.wildfly.security.password.spec.Encoding;
@@ -106,6 +105,8 @@ import org.wildfly.security.password.spec.PasswordSpec;
 import org.wildfly.security.password.util.ModularCrypt;
 import org.wildfly.security.permission.ElytronPermission;
 import org.wildfly.security.encryption.CipherUtil;
+import java.security.MessageDigest;
+
 /**
  * A simple filesystem-backed security realm.
  *
@@ -149,7 +150,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         this.root = root;
         this.nameRewriter = nameRewriter;
         this.levels = levels;
-        this.encoded = encoded;
+        this.encoded = secretKey == null && encoded;
         this.hashCharset = hashCharset != null ? hashCharset : StandardCharsets.UTF_8;
         this.hashEncoding = hashEncoding != null ? hashEncoding : Encoding.BASE64;
         this.secretKey = secretKey;
@@ -324,14 +325,23 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         this(root, NameRewriter.IDENTITY_REWRITER, 2, true, hashEncoding, hashCharset, secretKey);
     }
 //TODO: Hash and Encode with BASE32
-    private Path pathFor(String name) {
+    private Path pathFor(String name) throws NoSuchAlgorithmException{
         assert name.codePointCount(0, name.length()) > 0;
         String normalizedName = name;
 
-        if (encoded) {
+        if (encoded || this.secretKey != null) {
             normalizedName = Normalizer.normalize(name, Normalizer.Form.NFKC)
                     .toLowerCase(Locale.ROOT)
                     .replaceAll("[^a-z0-9]", "_");
+        }
+
+        if(this.secretKey != null) {
+            normalizedName = hashUsername(normalizedName);
+
+        } else if (encoded) {
+            String base32 = ByteIterator.ofBytes(new ByteStringBuilder().append(name).toArray())
+                    .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
+            normalizedName = normalizedName + "-" + base32;
         }
 
         Path path = root;
@@ -345,13 +355,25 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
             }
         }
 
-        if (encoded) {
-            String base32 = ByteIterator.ofBytes(new ByteStringBuilder().append(name).toArray())
-                    .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
-            name = normalizedName + "-" + base32;
-        }
+        return path.resolve(normalizedName + ".xml");
+    }
 
-        return path.resolve(name + ".xml");
+    private String hashUsername(String name) throws NoSuchAlgorithmException{
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        md.update(name.getBytes(this.hashCharset));
+        byte[] digest = md.digest();
+        StringBuilder hexStringBuffer = new StringBuilder();
+        for (byte b : digest) {
+            hexStringBuffer.append(byteToHex(b));
+        }
+        return hexStringBuffer.toString();
+    }
+
+    private String byteToHex(byte num) {
+        char[] hexDigits = new char[2];
+        hexDigits[0] = Character.forDigit((num >> 4) & 0xF, 16);
+        hexDigits[1] = Character.forDigit((num & 0xF), 16);
+        return new String(hexDigits);
     }
 
     public Charset getHashCharset() {
