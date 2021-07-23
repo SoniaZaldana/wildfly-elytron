@@ -128,6 +128,10 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
 
     private final ConcurrentHashMap<String, IdentitySharedExclusiveLock> realmIdentityLocks = new ConcurrentHashMap<>();
 
+    public static FileSystemSecurityRealmBuilder builder() {
+        return new FileSystemSecurityRealmBuilder();
+    }
+
     /**
      * Construct a new instance.
      *
@@ -243,7 +247,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         this(root, NameRewriter.IDENTITY_REWRITER, 2, true, hashEncoding, hashCharset, null);
     }
 
-//TODO: Hash and Encode with BASE32
+//TODO: Encode with BASE32
     private Path pathFor(String name) throws NoSuchAlgorithmException{
         assert name.codePointCount(0, name.length()) > 0;
         String normalizedName = name;
@@ -252,6 +256,11 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
             normalizedName = Normalizer.normalize(name, Normalizer.Form.NFKC)
                     .toLowerCase(Locale.ROOT)
                     .replaceAll("[^a-z0-9]", "_");
+        }
+
+        if(this.secretKey != null){
+            normalizedName = ByteIterator.ofBytes(new ByteStringBuilder().append(name).toArray())
+                    .base32Encode(Base32Alphabet.STANDARD, false).drainToString();
         }
 
         if (encoded) {
@@ -274,19 +283,6 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
         return path.resolve(normalizedName + ".xml");
     }
 
-    private String hashHexUsername(String name) throws NoSuchAlgorithmException{
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        md.update(name.getBytes(this.hashCharset));
-        byte[] digest = md.digest();
-        StringBuilder hexStringBuffer = new StringBuilder();
-        char[] hexDigits = new char[2];
-        for (byte b : digest) {
-            hexDigits[0] = Character.forDigit((b >> 4) & 0xF, 16);
-            hexDigits[1] = Character.forDigit((b & 0xF), 16);
-            hexStringBuffer.append(hexDigits);
-        }
-        return hexStringBuffer.toString();
-    }
 
     public Charset getHashCharset() {
         return this.hashCharset;
@@ -295,6 +291,13 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
     private String nameFor(Path path) {
         String fileName = path.toString();
         fileName = fileName.substring(0, fileName.length() - 4); // remove ".xml"
+
+        if(secretKey != null){
+            CodePointIterator it = CodePointIterator.ofString(fileName);
+            fileName = it.base32Decode(Base32Alphabet.STANDARD, false)
+                    .asUtf8String().drainToString();
+        }
+
         if (encoded) {
             CodePointIterator it = CodePointIterator.ofString(fileName);
             it.delimitedBy('-').skipAll();
@@ -331,12 +334,9 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
     }
 
     private ModifiableRealmIdentity getRealmIdentity(final String name, final boolean exclusive) throws GeneralSecurityException{
-        String finalName = nameRewriter.rewriteName(name);
+        final String finalName = nameRewriter.rewriteName(name);
         if (finalName == null) {
             throw ElytronMessages.log.invalidName();
-        }
-        if(this.secretKey != null) {
-            finalName = hashHexUsername(finalName);
         }
 
         // Acquire the appropriate lock for the realm identity
@@ -579,11 +579,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                 if (credential.canVerify(evidence)) {
                     boolean verified = false;
                     if (credential instanceof PasswordCredential) {
-                        if(this.secretKey != null){
                             verified = ((PasswordCredential )credential).verify(evidence, hashCharset);
-                        } else {
-                            verified = ((PasswordCredential) credential).verify(evidence, hashCharset);
-                        }
                     } else {
                         verified = credential.verify(evidence);
                     }
@@ -892,8 +888,8 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                     for (String value : entry) {
                         streamWriter.writeCharacters("\n        ");
                         streamWriter.writeStartElement("attribute");
-                        streamWriter.writeAttribute("name", CipherUtil.encrypt(entry.getKey(), this.secretKey));
-                        streamWriter.writeAttribute("value", CipherUtil.encrypt(value, this.secretKey));
+                        streamWriter.writeAttribute("name", this.secretKey != null ? CipherUtil.encrypt(entry.getKey(), this.secretKey) : entry.getKey());
+                        streamWriter.writeAttribute("value", this.secretKey != null ? CipherUtil.encrypt(value, this.secretKey) : value);
                         streamWriter.writeEndElement();
                     }
                 } while (entryIter.hasNext());
@@ -1099,7 +1095,7 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                         String decryptedText = CipherUtil.decrypt(text, secretKey);
                         byte[] passwordBytes = decryptedText.getBytes();
                         System.out.println("Before Decryption: " + text);
-                        System.out.println("Before Decryption: " + passwordBytes);
+                        System.out.println("After Decryption: " + passwordBytes);
                         PasswordSpec passwordSpec = BasicPasswordSpecEncoding.decode(passwordBytes);
 
                         if (passwordSpec != null) {
@@ -1232,7 +1228,11 @@ public final class FileSystemSecurityRealm implements ModifiableSecurityRealm, C
                 throw ElytronMessages.log.fileSystemRealmMissingAttribute("value", path, streamReader.getLocation().getLineNumber(), this.name);
             }
             try {
-                attributes.addLast(CipherUtil.decrypt(name, this.secretKey), CipherUtil.decrypt(value, this.secretKey));
+                if(this.secretKey != null) {
+                    attributes.addLast(CipherUtil.decrypt(name, this.secretKey), CipherUtil.decrypt(value, this.secretKey));
+                } else {
+                    attributes.addLast(name, value);
+                }
             } catch (GeneralSecurityException e){
                 e.printStackTrace();
             }
